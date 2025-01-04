@@ -4,7 +4,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -22,7 +22,6 @@ use App\Models\Payment;
 use App\Models\PaymentHash;
 use App\Models\PaymentType;
 use App\Models\SystemLog;
-use App\PaymentDrivers\Stripe\UpdatePaymentMethods;
 use App\PaymentDrivers\Stripe\Utilities;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -32,7 +31,11 @@ use Illuminate\Queue\SerializesModels;
 
 class PaymentIntentProcessingWebhook implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, Utilities;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
+    use Utilities;
 
     public $tries = 1; //number of retries
 
@@ -56,53 +59,55 @@ class PaymentIntentProcessingWebhook implements ShouldQueue
     /* Stub processing payment intents with a pending payment */
     public function handle()
     {
+        nlog($this->stripe_request);
+        // The first payment will always be a PI payment - subsequent are PY
 
         MultiDB::findAndSetDbByCompanyKey($this->company_key);
 
-        $company = Company::where('company_key', $this->company_key)->first();
+        $company = Company::query()->where('company_key', $this->company_key)->first();
 
-            foreach ($this->stripe_request as $transaction) {
+        foreach ($this->stripe_request as $transaction) {
 
-                if(array_key_exists('payment_intent', $transaction))
-                {
-                    $payment = Payment::query()
-                        ->where('company_id', $company->id)
-                        ->where('transaction_reference', $transaction['payment_intent'])
-                        ->first();
-                        
-                }
-                else
-                {
-                     $payment = Payment::query()
-                        ->where('company_id', $company->id)
-                        ->where('transaction_reference', $transaction['id'])
-                        ->first();
-                }
+            $payment = Payment::query()
+                ->where('company_id', $company->id)
+                ->where('transaction_reference', $transaction['id'])
+                ->first();
 
-                if ($payment) {
-                    $payment->status_id = Payment::STATUS_PENDING;
-                    $payment->save();
-    
-                    $this->payment_completed = true;
-                }
+            if ($payment) {
+                nlog("found payment");
+                $this->payment_completed = true;
             }
 
+            if (isset($transaction['payment_method'])) {
+                /** @var \App\Models\ClientGatewayToken $cgt **/
+                $cgt = ClientGatewayToken::where('token', $transaction['payment_method'])->first();
 
-        if($this->payment_completed)
+                if ($cgt && $cgt->meta?->state == 'unauthorized') {
+                    $meta = $cgt->meta;
+                    $meta->state = 'authorized';
+                    $cgt->meta = $meta;
+                    $cgt->save();
+                }
+            }
+        }
+
+        if ($this->payment_completed) {
             return;
-
-        $company_gateway = CompanyGateway::find($this->company_gateway_id);
+        }
+        $company_gateway = CompanyGateway::query()->find($this->company_gateway_id);
         $stripe_driver = $company_gateway->driver()->init();
 
         $charge_id = false;
 
-        if(isset($this->stripe_request['object']['charges']) && optional($this->stripe_request['object']['charges']['data'][0])['id'])
-            $charge_id = $this->stripe_request['object']['charges']['data'][0]['id']; // API VERSION 2018
-        elseif (isset($this->stripe_request['object']['latest_charge']))               
-            $charge_id = $this->stripe_request['object']['latest_charge']; // API VERSION 2022-11-15
+        if (isset($this->stripe_request['object']['charges']) && optional($this->stripe_request['object']['charges']['data'][0])['id']) {
+            $charge_id = $this->stripe_request['object']['charges']['data'][0]['id'];
+        } // API VERSION 2018
+        elseif (isset($this->stripe_request['object']['latest_charge'])) {
+            $charge_id = $this->stripe_request['object']['latest_charge'];
+        } // API VERSION 2022-11-15
 
 
-        if(!$charge_id){
+        if (!$charge_id) {
             nlog("could not resolve charge");
             return;
         }
@@ -111,39 +116,39 @@ class PaymentIntentProcessingWebhook implements ShouldQueue
 
         $charge = \Stripe\Charge::retrieve($charge_id, $stripe_driver->stripe_connect_auth);
 
-        if(!$charge)
-        {
+        if (!$charge) {
             nlog("no charge found");
             nlog($this->stripe_request);
             return;
         }
 
-        $company = Company::where('company_key', $this->company_key)->first();
+        $company = Company::query()->where('company_key', $this->company_key)->first();
 
         $payment = Payment::query()
                          ->where('company_id', $company->id)
                          ->where('transaction_reference', $charge['id'])
                          ->first();
 
-         //return early
-        if($payment && $payment->status_id == Payment::STATUS_PENDING){
-            nlog(" payment found and status correct - returning "); 
+        //return early
+        if ($payment && $payment->status_id == Payment::STATUS_PENDING) {
+            nlog(" payment found and status correct - returning ");
             return;
-        }
-        elseif($payment){
+        } elseif ($payment) {
             $payment->status_id = Payment::STATUS_PENDING;
             $payment->save();
         }
 
         $hash = isset($charge['metadata']['payment_hash']) ? $charge['metadata']['payment_hash'] : false;
 
-        if(!$hash)
+        if (!$hash) {
             return;
+        }
 
         $payment_hash = PaymentHash::where('hash', $hash)->first();
 
-        if(!$payment_hash)
+        if (!$payment_hash) {
             return;
+        }
 
         $stripe_driver->client = $payment_hash->fee_invoice->client;
 
@@ -164,23 +169,21 @@ class PaymentIntentProcessingWebhook implements ShouldQueue
             $company,
         );
 
-        if(isset($pi['payment_method_types']) && in_array('us_bank_account', $pi['payment_method_types']))
-        {
-
+        if (isset($pi['payment_method_types']) && in_array('us_bank_account', $pi['payment_method_types'])) {
             $invoice = Invoice::with('client')->withTrashed()->find($payment_hash->fee_invoice_id);
             $client = $invoice->client;
 
-            if($invoice->is_deleted)
+            if ($invoice->is_deleted) {
                 return;
+            }
 
             $this->updateAchPayment($payment_hash, $client, $meta);
         }
-
     }
 
     private function updateAchPayment($payment_hash, $client, $meta)
     {
-        $company_gateway = CompanyGateway::find($this->company_gateway_id);
+        $company_gateway = CompanyGateway::query()->find($this->company_gateway_id);
         $payment_method_type = $meta['gateway_type_id'];
         $driver = $company_gateway->driver($client)->init()->setPaymentMethod($payment_method_type);
 
@@ -195,7 +198,7 @@ class PaymentIntentProcessingWebhook implements ShouldQueue
             'transaction_reference' => $meta['transaction_reference'],
             'gateway_type_id' => GatewayType::BANK_TRANSFER,
         ];
-        
+
         $payment = $driver->createPayment($data, Payment::STATUS_PENDING);
 
         SystemLogger::dispatch(
@@ -208,7 +211,6 @@ class PaymentIntentProcessingWebhook implements ShouldQueue
         );
 
         try {
-
             $customer = $driver->getCustomer($meta['customer']);
             $method = $driver->getStripePaymentMethod($meta['payment_method']);
             $payment_method = $meta['payment_method'];
@@ -225,7 +227,7 @@ class PaymentIntentProcessingWebhook implements ShouldQueue
                 return;
             }
 
-            $payment_meta = new \stdClass;
+            $payment_meta = new \stdClass();
             $payment_meta->brand = (string) \sprintf('%s (%s)', $method->us_bank_account['bank_name'], ctrans('texts.ach'));
             $payment_meta->last4 = (string) $method->us_bank_account['last4'];
             $payment_meta->type = GatewayType::BANK_TRANSFER;
@@ -244,12 +246,9 @@ class PaymentIntentProcessingWebhook implements ShouldQueue
             }
 
             $driver->storeGatewayToken($data, $additional_data);
-            
-        }
-        catch(\Exception $e){
+        } catch (\Exception $e) {
             nlog("failed to import payment methods");
             nlog($e->getMessage());
         }
     }
-
 }

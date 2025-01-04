@@ -4,7 +4,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -22,7 +22,10 @@ use Illuminate\Queue\SerializesModels;
 
 class SendFailedEmails implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
     /**
      * Create a new job instance.
@@ -64,7 +67,7 @@ class SendFailedEmails implements ShouldQueue
 
             if ($invitation->invoice) {
                 if (! $invitation->contact->trashed() && $invitation->contact->send_email && $invitation->contact->email) {
-                    EmailEntity::dispatch($invitation, $invitation->company, $job_meta_array['reminder_template']);
+                    EmailEntity::dispatch($invitation->withoutRelations(), $invitation->company->db, $job_meta_array['reminder_template']);
                 }
             }
         });

@@ -4,24 +4,18 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers;
 
-use App\Exceptions\NonExistingMigrationFile;
 use App\Http\Requests\Import\ImportJsonRequest;
-use App\Jobs\Company\CompanyExport;
 use App\Jobs\Company\CompanyImport;
 use App\Utils\Ninja;
 use App\Utils\Traits\MakesHash;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
-use ZipArchive;
 
 class ImportJsonController extends BaseController
 {
@@ -39,7 +33,6 @@ class ImportJsonController extends BaseController
      *      tags={"import"},
      *      summary="Import data from the system",
      *      description="Import data from the system",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Response(
      *          response=200,
@@ -62,6 +55,9 @@ class ImportJsonController extends BaseController
      */
     public function import(ImportJsonRequest $request)
     {
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
         $file_location = $request->file('files')
             ->storeAs(
                 'migrations',
@@ -70,9 +66,9 @@ class ImportJsonController extends BaseController
             );
 
         if (Ninja::isHosted()) {
-            CompanyImport::dispatch(auth()->user()->getCompany(), auth()->user(), $file_location, $request->except('files'))->onQueue('migration');
+            CompanyImport::dispatch($user->company(), $user, $file_location, $request->except('files'))->onQueue('migration');
         } else {
-            CompanyImport::dispatch(auth()->user()->getCompany(), auth()->user(), $file_location, $request->except('files'));
+            CompanyImport::dispatch($user->company(), $user, $file_location, $request->except('files'));
         }
 
         return response()->json(['message' => 'Processing'], 200);

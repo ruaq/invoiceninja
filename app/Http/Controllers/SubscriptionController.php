@@ -5,7 +5,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -16,6 +16,7 @@ use App\Events\Subscription\SubscriptionWasCreated;
 use App\Events\Subscription\SubscriptionWasUpdated;
 use App\Factory\SubscriptionFactory;
 use App\Filters\SubscriptionFilters;
+use App\Http\Requests\Subscription\BulkSubscriptionRequest;
 use App\Http\Requests\Subscription\CreateSubscriptionRequest;
 use App\Http\Requests\Subscription\DestroySubscriptionRequest;
 use App\Http\Requests\Subscription\EditSubscriptionRequest;
@@ -48,7 +49,7 @@ class SubscriptionController extends BaseController
     /**
      * Show the list of Subscriptions.
      *
-     * @return Response
+     * @return \Illuminate\Http\Response
      *
      * @OA\Get(
      *      path="/api/v1/subscriptions",
@@ -57,8 +58,7 @@ class SubscriptionController extends BaseController
      *      summary="Gets a list of subscriptions",
      *      description="Lists subscriptions.",
      *
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -93,7 +93,7 @@ class SubscriptionController extends BaseController
      *
      * @param CreateSubscriptionRequest $request  The request
      *
-     * @return Response
+     * @return \Illuminate\Http\Response
      *
      *
      * @OA\Get(
@@ -102,8 +102,7 @@ class SubscriptionController extends BaseController
      *      tags={"subscriptions"},
      *      summary="Gets a new blank subscriptions object",
      *      description="Returns a blank object with default values",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -129,7 +128,10 @@ class SubscriptionController extends BaseController
      */
     public function create(CreateSubscriptionRequest $request): \Illuminate\Http\Response
     {
-        $subscription = SubscriptionFactory::create(auth()->user()->company()->id, auth()->user()->id);
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        $subscription = SubscriptionFactory::create($user->company()->id, $user->id);
 
         return $this->itemResponse($subscription);
     }
@@ -139,7 +141,7 @@ class SubscriptionController extends BaseController
      *
      * @param StoreSubscriptionRequest $request  The request
      *
-     * @return Response
+     * @return \Illuminate\Http\Response
      *
      *
      * @OA\Post(
@@ -148,8 +150,7 @@ class SubscriptionController extends BaseController
      *      tags={"subscriptions"},
      *      summary="Adds a subscriptions",
      *      description="Adds an subscriptions to the system",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -175,9 +176,12 @@ class SubscriptionController extends BaseController
      */
     public function store(StoreSubscriptionRequest $request): \Illuminate\Http\Response
     {
-        $subscription = $this->subscription_repo->save($request->all(), SubscriptionFactory::create(auth()->user()->company()->id, auth()->user()->id));
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
 
-        event(new SubscriptionWasCreated($subscription, $subscription->company, Ninja::eventVars(auth()->user() ? auth()->user()->id : null)));
+        $subscription = $this->subscription_repo->save($request->all(), SubscriptionFactory::create($user->company()->id, $user->id));
+
+        event(new SubscriptionWasCreated($subscription, $subscription->company, Ninja::eventVars($user->id)));
 
         return $this->itemResponse($subscription);
     }
@@ -186,9 +190,9 @@ class SubscriptionController extends BaseController
      * Display the specified resource.
      *
      * @param ShowSubscriptionRequest $request  The request
-     * @param Invoice $subscription  The invoice
+     * @param Subscription $subscription  The invoice
      *
-     * @return Response
+     * @return \Illuminate\Http\Response
      *
      *
      * @OA\Get(
@@ -197,8 +201,7 @@ class SubscriptionController extends BaseController
      *      tags={"subscriptions"},
      *      summary="Shows an subscriptions",
      *      description="Displays an subscriptions by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -242,9 +245,9 @@ class SubscriptionController extends BaseController
      * Show the form for editing the specified resource.
      *
      * @param EditSubscriptionRequest $request  The request
-     * @param Invoice $subscription  The invoice
+     * @param Subscription $subscription  The subscription
      *
-     * @return Response
+     * @return \Illuminate\Http\Response
      *
      * @OA\Get(
      *      path="/api/v1/subscriptions/{id}/edit",
@@ -252,8 +255,7 @@ class SubscriptionController extends BaseController
      *      tags={"subscriptions"},
      *      summary="Shows an subscriptions for editting",
      *      description="Displays an subscriptions by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -297,9 +299,9 @@ class SubscriptionController extends BaseController
      * Update the specified resource in storage.
      *
      * @param UpdateSubscriptionRequest $request  The request
-     * @param Subscription $subscription  The invoice
+     * @param Subscription $subscription  The subscription
      *
-     * @return Response
+     * @return \Illuminate\Http\Response
      *
      *
      * @OA\Put(
@@ -308,8 +310,7 @@ class SubscriptionController extends BaseController
      *      tags={"subscriptions"},
      *      summary="Updates an subscriptions",
      *      description="Handles the updating of an subscriptions by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -344,7 +345,7 @@ class SubscriptionController extends BaseController
      *       ),
      *     )
      */
-    public function update(UpdateSubscriptionRequest $request, Subscription $subscription)
+    public function update(UpdateSubscriptionRequest $request, Subscription $subscription): \Illuminate\Http\Response
     {
         if ($request->entityIsDeleted($subscription)) {
             return $request->disallowUpdate();
@@ -352,7 +353,10 @@ class SubscriptionController extends BaseController
 
         $subscription = $this->subscription_repo->save($request->all(), $subscription);
 
-        event(new SubscriptionWasUpdated($subscription, $subscription->company, Ninja::eventVars(auth()->user() ? auth()->user()->id : null)));
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        event(new SubscriptionWasUpdated($subscription, $subscription->company, Ninja::eventVars($user->id)));
 
         return $this->itemResponse($subscription);
     }
@@ -361,9 +365,9 @@ class SubscriptionController extends BaseController
      * Remove the specified resource from storage.
      *
      * @param DestroySubscriptionRequest $request
-     * @param Subscription $invoice
+     * @param Subscription $subscription
      *
-     * @return     Response
+     * @return \Illuminate\Http\Response
      *
      * @throws \Exception
      * @OA\Delete(
@@ -372,8 +376,7 @@ class SubscriptionController extends BaseController
      *      tags={"subscriptions"},
      *      summary="Deletes a subscriptions",
      *      description="Handles the deletion of an subscriptions by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -417,7 +420,7 @@ class SubscriptionController extends BaseController
     /**
      * Perform bulk actions on the list view.
      *
-     * @return Response
+     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse
      *
      *
      * @OA\Post(
@@ -426,8 +429,7 @@ class SubscriptionController extends BaseController
      *      tags={"subscriptions"},
      *      summary="Performs bulk actions on an array of subscriptions",
      *      description="",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/index"),
      *      @OA\RequestBody(
@@ -465,19 +467,31 @@ class SubscriptionController extends BaseController
      *       ),
      *     )
      */
-    public function bulk()
+    public function bulk(BulkSubscriptionRequest $request)
     {
-        $action = request()->input('action');
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
 
-        $ids = request()->input('ids');
-        $subscriptions = Subscription::withTrashed()->find($this->transformKeys($ids));
+        $subscriptions = Subscription::withTrashed()->find($request->ids);
 
-        $subscriptions->each(function ($subscription, $key) use ($action) {
-            if (auth()->user()->can('edit', $subscription)) {
-                $this->subscription_repo->{$action}($subscription);
+        if (in_array($request->action, ['assign_invoice'])) {
+
+            $subscriptions->each(function ($subscription, $key) use ($request, $user) {
+                if ($user->can('edit', $subscription)) {
+                    $this->subscription_repo->{$request->action}($subscription, $request);
+                }
+            });
+
+            return $this->listResponse(Subscription::withTrashed()->whereIn('id', $request->ids));
+
+        }
+
+        $subscriptions->each(function ($subscription, $key) use ($request, $user) {
+            if ($user->can('edit', $subscription)) {
+                $this->subscription_repo->{$request->action}($subscription);
             }
         });
 
-        return $this->listResponse(Subscription::withTrashed()->whereIn('id', $this->transformKeys($ids)));
+        return $this->listResponse(Subscription::withTrashed()->whereIn('id', $request->ids));
     }
 }

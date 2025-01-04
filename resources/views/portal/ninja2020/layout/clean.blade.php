@@ -2,6 +2,15 @@
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 
     <head>
+        @if(App\Utils\Ninja::isHosted())
+            <!-- G Tag Manager -->
+            <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+            new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+            j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+            'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+            })(window,document,'script','dataLayer','GTM-WMJ5W23');</script>
+            <!-- End G Tag Manager -->
+        @endif
         <!-- Error: {{ session('error') }} -->
         @if (isset($company) && $company->matomo_url && $company->matomo_id)
             <script>
@@ -37,9 +46,6 @@
                     ga('send', 'event', category, action, this.src);
                 }
             </script>
-            <script>
-                Vue.config.devtools = true;
-            </script>
         @else
             <script>
                 function gtag() {
@@ -56,6 +62,8 @@
             <title>@yield('meta_title', '')</title>
         @endif
 
+        @yield('head')
+        
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="description" content="@yield('meta_description')"/>
@@ -64,8 +72,7 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
         <!-- Scripts -->
-        <script src="{{ mix('js/app.js') }}" defer></script>
-        <script src="{{ asset('vendor/alpinejs@2.8.2/alpine.js') }}" defer></script>
+        @vite('resources/js/app.js')
 
         <!-- Fonts -->
         <style>
@@ -81,8 +88,10 @@
         </style>
 
         <!-- Styles -->
-        <link href="{{ mix('css/app.css') }}" rel="stylesheet">
+        @vite('resources/sass/app.scss')
+        @if(auth()->guard('contact')->user() && !auth()->guard('contact')->user()->user->account->isPaid())
         {{-- <link href="{{ mix('favicon.png') }}" rel="shortcut icon" type="image/png"> --}}
+        @endif
 
         <link rel="canonical" href="{{ config('ninja.app_url') }}/{{ request()->path() }}"/>
 
@@ -91,6 +100,11 @@
 
         @livewireStyles
 
+        @if((bool) \App\Utils\Ninja::isSelfHost() && isset($company))
+            <style>
+                {!! $company->settings->portal_custom_css !!}
+            </style>
+        @endif
         <link rel="stylesheet" type="text/css" href="{{ asset('vendor/cookieconsent@3/cookieconsent.min.css') }}" defer>
     </head>
 
@@ -105,7 +119,7 @@
 
         @yield('body')
 
-        @livewireScripts
+        @livewireScriptConfig 
 
         <script src="{{ asset('vendor/cookieconsent@3/cookieconsent.min.js') }}" data-cfasync="false"></script>
         <script>

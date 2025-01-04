@@ -57,7 +57,7 @@
         @component('portal.ninja2020.components.general.card-element', ['title' => ctrans('texts.country')])
             <select name="countries" id="country" name="country" class="form-select input w-full bg-white" required>
                 @foreach($countries as $country)
-                    <option value="{{ $country->iso_3166_2 }}" {{$country->iso_3166_2 == 'US' ? "selected" : ""}}>{{ $country->iso_3166_2 }} ({{ $country->name }})</option>
+                    <option value="{{ $country->iso_3166_2 }}" {{$country->iso_3166_2 == 'US' ? "selected" : ""}}>{{ $country->iso_3166_2 }} ({{ $country->getName() }})</option>
                 @endforeach
             </select>
         @endcomponent
@@ -65,7 +65,7 @@
         @component('portal.ninja2020.components.general.card-element', ['title' => ctrans('texts.currency')])
             <select name="currencies" id="currency" name="currency" class="form-select input w-full">
                 @foreach($currencies as $currency)
-                    <option value="{{ $currency->code }}" {{$currency->code == 'USD' ? "selected" : ""}}>{{ $currency->code }} ({{ $currency->name }})</option>
+                    <option value="{{ $currency->code }}" {{$currency->code == 'USD' ? "selected" : ""}}>{{ $currency->code }} ({{ $currency->getName() }})</option>
                 @endforeach
             </select>
         @endcomponent
@@ -80,7 +80,7 @@
 
         @component('portal.ninja2020.components.general.card-element-single')
             <input type="checkbox" class="form-checkbox mr-1" name="accept_terms" id="accept-terms" required>
-            <label for="accept-terms" class="cursor-pointer">{{ ctrans('texts.ach_authorization', ['company' => auth()->user()->company->present()->name, 'email' => auth('contact')->user()->client->company->settings->email]) }}</label>
+            <label for="accept-terms" class="cursor-pointer">{{ ctrans('texts.ach_authorization', ['company' => auth()->guard('contact')->user()->company->present()->name, 'email' => auth()->guard('contact')->user()->client->company->settings->email]) }}</label>
         @endcomponent
 
         <div class="bg-white px-4 py-5 flex justify-end">

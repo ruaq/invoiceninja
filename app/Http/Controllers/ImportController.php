@@ -4,7 +4,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -27,7 +27,7 @@ class ImportController extends Controller
      *
      * @param PreImportRequest $request
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response
      *
      * @OA\Post(
      *      path="/api/v1/preimport",
@@ -35,8 +35,7 @@ class ImportController extends Controller
      *      tags={"imports"},
      *      summary="Pre Import checks - returns a reference to the job and the headers of the CSV",
      *      description="Pre Import checks - returns a reference to the job and the headers of the CSV",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\RequestBody(
@@ -82,27 +81,132 @@ class ImportController extends Controller
         /** @var UploadedFile $file */
         foreach ($request->files->get('files') as $entityType => $file) {
             $contents = file_get_contents($file->getPathname());
-            // $contents = mb_convert_encoding($contents, 'UTF-16LE', 'UTF-8');
+
+            $contents = $this->convertEncoding($contents);
 
             // Store the csv in cache with an expiry of 10 minutes
-            Cache::put($hash.'-'.$entityType, base64_encode($contents), 600);
+            Cache::put($hash.'-'.$entityType, base64_encode($contents), 1200);
 
             // Parse CSV
             $csv_array = $this->getCsvData($contents);
 
             $class_map = $this->getEntityMap($entityType);
 
+            $hints = $this->setImportHints($entityType, $class_map::importable(), $csv_array[0]);
+
             $data['mappings'][$entityType] = [
                 'available' => $class_map::importable(),
                 'headers'   => array_slice($csv_array, 0, 2),
+                'hints' => $hints,
             ];
         }
 
         return response()->json($data);
     }
 
+    private function setImportHints($entity_type, $available_keys, $headers): array
+    {
+        $hints = [];
+
+        $translated_keys = collect($available_keys)->map(function ($value, $key) {
+
+            $parts = explode(".", $value);
+            $index = $parts[0];
+            $label = $parts[1] ?? $parts[0];
+
+            return ['key' => $key, 'index' => ctrans("texts.{$index}"), 'label' => ctrans("texts.{$label}")];
+
+        })->toArray();
+
+        //Exact string match
+        foreach ($headers as $key => $value) {
+
+            foreach ($translated_keys as $tkey => $tvalue) {
+
+                $concat_needle = str_ireplace(" ", "", $tvalue['index'].$tvalue['label']);
+                $concat_value = str_ireplace(" ", "", $value);
+
+                if ($this->testMatch($concat_value, $concat_needle)) {
+
+                    $hit = $tvalue['key'];
+                    $hints[$key] = $hit;
+                    unset($translated_keys[$tkey]);
+                    break;
+
+                } else {
+                    $hints[$key] = null;
+                }
+
+            }
+
+        }
+
+        //Label Match
+        foreach ($headers as $key => $value) {
+
+            if (isset($hints[$key])) {
+                continue;
+            }
+
+            foreach ($translated_keys as $tkey => $tvalue) {
+
+                if ($this->testMatch($value, $tvalue['label'])) {
+                    $hit = $tvalue['key'];
+                    $hints[$key] = $hit;
+                    unset($translated_keys[$tkey]);
+                    break;
+                } else {
+                    $hints[$key] = null;
+                }
+
+            }
+
+        }
+
+        //Index matching pass using the index of the translation here
+        foreach ($headers as $key => $value) {
+            if (isset($hints[$key])) {
+                continue;
+            }
+
+            foreach ($translated_keys as $tkey => $tvalue) {
+                if ($this->testMatch($value, $tvalue['index'])) {
+                    $hit = $tvalue['key'];
+                    $hints[$key] = $hit;
+                    unset($translated_keys[$tkey]);
+                    break;
+                } else {
+                    $hints[$key] = null;
+                }
+            }
+
+        }
+
+        return $hints;
+    }
+
+    private function testMatch($haystack, $needle): bool
+    {
+        return stripos($haystack, $needle) !== false;
+    }
+
+    private function convertEncoding($data)
+    {
+
+        // $enc = mb_detect_encoding($data, mb_list_encodings(), true);
+
+        // if($enc !== false) {
+        //     $data = mb_convert_encoding($data, "UTF-8", $enc);
+        // }
+
+        return $data;
+    }
+
     public function import(ImportRequest $request)
     {
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
         $data = $request->all();
 
         if (empty($data['hash'])) {
@@ -114,11 +218,12 @@ class ImportController extends Controller
                 $contents = file_get_contents($file->getPathname());
                 // Store the csv in cache with an expiry of 10 minutes
                 Cache::put($hash.'-'.$entityType, base64_encode($contents), 600);
+                nlog($hash.'-'.$entityType);
             }
         }
 
         unset($data['files']);
-        CSVIngest::dispatch($data, auth()->user()->company());
+        CSVIngest::dispatch($data, $user->company());
 
         return response()->json(['message' => ctrans('texts.import_started')], 200);
     }
@@ -155,19 +260,81 @@ class ImportController extends Controller
             }
         }
 
+        return $this->convertData($data);
+    }
+
+
+
+    private function convertData(array $data): array
+    {
+
+        // List of encodings to check against
+        $encodings = [
+            'UTF-8',
+            'ISO-8859-1',  // Latin-1
+            'ISO-8859-2',  // Latin-2
+            'WINDOWS-1252', // CP1252
+            'SHIFT-JIS',
+            'EUC-JP',
+            'GB2312',
+            'GBK',
+            'BIG5',
+            'ISO-2022-JP',
+            'KOI8-R',
+            'KOI8-U',
+            'WINDOWS-1251', // CP1251
+            'UTF-16',
+            'UTF-32',
+            'ASCII',
+            'WINDOWS-1254', // Turkish, which sometimes includes Georgian
+            'WINDOWS-1256', // Arabic, which sometimes includes Georgian
+            'ISO-8859-10',
+        ];
+
+        foreach ($data as $key => $value) {
+            // Only process strings
+            if (is_string($value)) {
+                // Detect the encoding of the string
+                $detectedEncoding = mb_detect_encoding($value, $encodings, true);
+
+                // If encoding is detected and it's not UTF-8, convert it to UTF-8
+                if ($detectedEncoding && $detectedEncoding !== 'UTF-8') {
+                    $array[$key] = mb_convert_encoding($value, 'UTF-8', $detectedEncoding);
+                }
+            }
+        }
+
         return $data;
     }
 
-    public function detectDelimiter($csvfile)
+
+    /**
+     * Returns the best delimiter
+     *
+     * @param string $csvfile
+     * @return string
+     */
+    public function detectDelimiter($csvfile): string
     {
-        $delimiters = array(',', '.', ';');
-        $bestDelimiter = ' ';
+
+        $delimiters = [',', '.', ';', '|'];
+        $bestDelimiter = ',';
         $count = 0;
-        foreach ($delimiters as $delimiter)
-            if (substr_count($csvfile, $delimiter) > $count) {
+
+        // 10-01-2024 - A better way to resolve the csv file delimiter.
+        $csvfile = substr($csvfile, 0, strpos($csvfile, "\n"));
+
+        foreach ($delimiters as $delimiter) {
+
+            if (substr_count(strstr($csvfile, "\n", true), $delimiter) >= $count) {
                 $count = substr_count($csvfile, $delimiter);
                 $bestDelimiter = $delimiter;
             }
-        return $bestDelimiter;
+
+        }
+
+        /** @phpstan-ignore-next-line **/
+        return $bestDelimiter ?? ',';
+
     }
 }

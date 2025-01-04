@@ -11,21 +11,20 @@
 
 namespace Tests\Unit;
 
-use App\Models\Invoice;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Carbon;
 use Tests\MockAccountData;
 use Tests\TestCase;
 
 /**
- * @test
+ * 
  */
 class RecurringDateTest extends TestCase
 {
     use DatabaseTransactions;
     use MockAccountData;
 
-    protected function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
@@ -41,6 +40,16 @@ class RecurringDateTest extends TestCase
         $trial_ends = $now->addSeconds($trial)->addDays(1);
 
         $this->assertequals($trial_ends->format('Y-m-d'), '2021-12-03');
+    }
+
+    public function testDateOverflowsForEndOfMonth()
+    {
+        $today = Carbon::parse('2022-01-31');
+
+        $next_month = $today->addMonthNoOverflow();
+
+        $this->assertEquals('2022-02-28', $next_month->format('Y-m-d'));
+
     }
 
 }

@@ -4,19 +4,18 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Transformers;
 
-use App\Models\Account;
 use App\Models\BankTransaction;
 use App\Models\Company;
 use App\Models\Expense;
-use App\Models\Invoice;
-use App\Transformers\VendorTransformer;
+use App\Models\Payment;
+use App\Models\Vendor;
 use App\Utils\Traits\MakesHash;
 
 /**
@@ -29,29 +28,29 @@ class BankTransactionTransformer extends EntityTransformer
     /**
      * @var array
      */
-    protected $defaultIncludes = [
+    protected array $defaultIncludes = [
     ];
 
     /**
      * @var array
      */
-    protected $availableIncludes = [
+    protected array $availableIncludes = [
         'company',
-        'account',
-        'expense',
+        // 'expense',
         'payment',
         'vendor',
         'bank_account',
     ];
 
     /**
-     * @param BankTransaction $bank_integration
+     * @param BankTransaction $bank_transaction
      * @return array
      */
     public function transform(BankTransaction $bank_transaction)
     {
         return [
             'id' => (string) $this->encodePrimaryKey($bank_transaction->id),
+            'user_id' => (string) $this->encodePrimaryKey($bank_transaction->user_id),
             'bank_integration_id' => (string) $this->encodePrimaryKey($bank_transaction->bank_integration_id),
             'transaction_id' => (int) $bank_transaction->transaction_id,
             'amount' => (float) $bank_transaction->amount ?: 0,
@@ -64,24 +63,20 @@ class BankTransactionTransformer extends EntityTransformer
             'bank_account_id' => (int) $bank_transaction->bank_account_id,
             'status_id' => (string) $bank_transaction->status_id,
             'description' => (string) $bank_transaction->description ?: '',
+            'participant' => (string) $bank_transaction->participant ?: '',
+            'participant_name' => (string) $bank_transaction->participant_name ?: '',
             'base_type' => (string) $bank_transaction->base_type ?: '',
             'invoice_ids' => (string) $bank_transaction->invoice_ids ?: '',
-            'expense_id'=> (string) $this->encodePrimaryKey($bank_transaction->expense_id) ?: '',
-            'payment_id'=> (string) $this->encodePrimaryKey($bank_transaction->payment_id) ?: '',
-            'vendor_id'=> (string) $this->encodePrimaryKey($bank_transaction->vendor_id) ?: '',
+            'expense_id' => (string) $bank_transaction->expense_id ?: '',
+            'payment_id' => (string) $this->encodePrimaryKey($bank_transaction->payment_id) ?: '',
+            'vendor_id' => (string) $this->encodePrimaryKey($bank_transaction->vendor_id) ?: '',
             'bank_transaction_rule_id' => (string) $this->encodePrimaryKey($bank_transaction->bank_transaction_rule_id) ?: '',
             'is_deleted' => (bool) $bank_transaction->is_deleted,
+            'nordigen_transaction_id' => (string) $bank_transaction->nordigen_transaction_id,
             'created_at' => (int) $bank_transaction->created_at,
             'updated_at' => (int) $bank_transaction->updated_at,
             'archived_at' => (int) $bank_transaction->deleted_at,
         ];
-    }
-
-    public function includeAccount(BankTransaction $bank_transaction)
-    {
-        $transformer = new AccountTransformer($this->serializer);
-
-        return $this->includeItem($bank_transaction->account, $transformer, Account::class);
     }
 
     public function includeCompany(BankTransaction $bank_transaction)
@@ -91,12 +86,12 @@ class BankTransactionTransformer extends EntityTransformer
         return $this->includeItem($bank_transaction->company, $transformer, Company::class);
     }
 
-    public function includeExpense(BankTransaction $bank_transaction)
-    {
-        $transformer = new ExpenseTransformer($this->serializer);
+    // public function includeExpense(BankTransaction $bank_transaction)
+    // {
+    //     $transformer = new ExpenseTransformer($this->serializer);
 
-        return $this->includeItem($bank_transaction->expense, $transformer, Expense::class);
-    }
+    //     return $this->includeItem($bank_transaction->expense, $transformer, Expense::class);
+    // }
 
     public function includeVendor(BankTransaction $bank_transaction)
     {
@@ -111,5 +106,4 @@ class BankTransactionTransformer extends EntityTransformer
 
         return $this->includeItem($bank_transaction->payment, $transformer, Payment::class);
     }
-
 }

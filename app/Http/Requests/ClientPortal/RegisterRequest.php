@@ -4,19 +4,20 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Requests\ClientPortal;
 
-use App\Libraries\MultiDB;
+use App\Utils\Ninja;
 use App\Models\Account;
 use App\Models\Company;
-use App\Utils\Ninja;
-use Illuminate\Foundation\Http\FormRequest;
+use App\Libraries\MultiDB;
 use Illuminate\Validation\Rule;
+use Illuminate\Foundation\Http\FormRequest;
+use App\Http\ValidationRules\Turnstile\Turnstile;
 
 class RegisterRequest extends FormRequest
 {
@@ -40,8 +41,8 @@ class RegisterRequest extends FormRequest
         $rules = [];
 
         foreach ($this->company()->client_registration_fields as $field) {
-            if ($field['required']) {
-                $rules[$field['key']] = ['bail','required'];
+            if ($field['visible'] ?? true) {
+                $rules[$field['key']] = $field['required'] ? ['bail','required'] : ['sometimes'];
             }
         }
 
@@ -59,23 +60,24 @@ class RegisterRequest extends FormRequest
             $rules['terms'] = ['required'];
         }
 
+        $rules['cf-turnstile-response'] = ['sometimes', new Turnstile];
+
         return $rules;
     }
 
     public function company()
     {
-
         //this should be all we need, the rest SHOULD be redundant because of our Middleware
         if ($this->key) {
-            return Company::where('company_key', $this->key)->first();
+            return Company::query()->where('company_key', $this->key)->first();
         }
 
         if ($this->company_key) {
-            return Company::where('company_key', $this->company_key)->firstOrFail();
+            return Company::query()->where('company_key', $this->company_key)->firstOrFail();
         }
 
         if (! $this->route()->parameter('company_key') && Ninja::isSelfHost()) {
-            $company = Account::first()->default_company;
+            $company = Account::query()->first()->default_company;
 
             if (! $company->client_can_register) {
                 abort(403, 'This page is restricted');

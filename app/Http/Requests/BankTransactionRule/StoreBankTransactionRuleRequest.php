@@ -4,7 +4,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -12,6 +12,7 @@
 namespace App\Http\Requests\BankTransactionRule;
 
 use App\Http\Requests\Request;
+use App\Models\Account;
 use App\Models\BankTransactionRule;
 use App\Utils\Traits\MakesHash;
 
@@ -24,13 +25,20 @@ class StoreBankTransactionRuleRequest extends Request
      *
      * @return bool
      */
-    public function authorize() : bool
+    public function authorize(): bool
     {
-        return auth()->user()->can('create', BankTransactionRule::class);
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        return $user->can('create', BankTransactionRule::class) && $user->account->hasFeature(Account::FEATURE_API);
+        ;
     }
-    
+
     public function rules()
     {
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
         /* Ensure we have a client name, and that all emails are unique*/
         $rules = [
             'name' => 'bail|required|string',
@@ -40,18 +48,13 @@ class StoreBankTransactionRuleRequest extends Request
             'rules.*.value' => 'bail|required|nullable',
             'auto_convert' => 'bail|sometimes|bool',
             'matches_on_all' => 'bail|sometimes|bool',
-            'applies_to' => 'bail|sometimes|string',
+            'applies_to' => 'bail|sometimes|string|in:CREDIT,DEBIT',
+            'on_credit_match' => 'bail|sometimes|in:create_payment,link_payment'
         ];
 
-        if(isset($this->category_id)) 
-            $rules['category_id'] = 'bail|sometimes|exists:expense_categories,id,company_id,'.auth()->user()->company()->id.',is_deleted,0';
-        
-        if(isset($this->vendor_id))
-            $rules['vendor_id'] = 'bail|sometimes|exists:vendors,id,company_id,'.auth()->user()->company()->id.',is_deleted,0';
-
-        if(isset($this->client_id))
-            $rules['client_id'] = 'bail|sometimes|exists:clients,id,company_id,'.auth()->user()->company()->id.',is_deleted,0';
-
+        $rules['category_id'] = 'bail|sometimes|nullable|exists:expense_categories,id,company_id,'.$user->company()->id.',is_deleted,0';
+        $rules['vendor_id'] = 'bail|sometimes|nullable|exists:vendors,id,company_id,'.$user->company()->id.',is_deleted,0';
+        $rules['client_id'] = 'bail|sometimes|nullable|exists:clients,id,company_id,'.$user->company()->id.',is_deleted,0';
 
         return $rules;
     }
@@ -64,7 +67,4 @@ class StoreBankTransactionRuleRequest extends Request
 
         $this->replace($input);
     }
-
-
-
 }

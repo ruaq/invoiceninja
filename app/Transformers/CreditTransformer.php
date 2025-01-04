@@ -4,7 +4,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -13,10 +13,10 @@ namespace App\Transformers;
 
 use App\Models\Activity;
 use App\Models\Backup;
+use App\Models\Client;
 use App\Models\Credit;
 use App\Models\CreditInvitation;
 use App\Models\Document;
-use App\Transformers\ActivityTransformer;
 use App\Utils\Traits\MakesHash;
 use League\Fractal\Resource\Item;
 
@@ -24,12 +24,12 @@ class CreditTransformer extends EntityTransformer
 {
     use MakesHash;
 
-    protected $defaultIncludes = [
+    protected array $defaultIncludes = [
         'invitations',
         'documents',
     ];
 
-    protected $availableIncludes = [
+    protected array $availableIncludes = [
         'activities',
         'client',
     ];
@@ -131,6 +131,10 @@ class CreditTransformer extends EntityTransformer
             'exchange_rate' => (float) $credit->exchange_rate,
             'paid_to_date' => (float) $credit->paid_to_date,
             'subscription_id' => $this->encodePrimaryKey($credit->subscription_id),
+            'invoice_id' => $credit->invoice_id ? $this->encodePrimaryKey($credit->invoice_id) : '',
+            'tax_info' => $credit->tax_data ?: new \stdClass(),
+            'e_invoice' => $credit->e_invoice ?: new \stdClass(),
+
         ];
     }
 }

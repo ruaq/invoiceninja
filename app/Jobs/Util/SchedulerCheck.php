@@ -4,14 +4,13 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Jobs\Util;
 
-use App\Models\Account;
 use App\Utils\Ninja;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -22,7 +21,10 @@ use Illuminate\Support\Facades\Artisan;
 
 class SchedulerCheck implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
     public $tries = 1;
 
@@ -40,9 +42,10 @@ class SchedulerCheck implements ShouldQueue
         set_time_limit(0);
 
 
-        if(Ninja::isHosted())
+        if (Ninja::isHosted()) {
             return;
-        
+        }
+
         if (config('ninja.app_version') != base_path('VERSION.txt')) {
             try {
                 Artisan::call('migrate', ['--force' => true]);
@@ -54,7 +57,8 @@ class SchedulerCheck implements ShouldQueue
             try {
                 Artisan::call('clear-compiled');
                 Artisan::call('route:clear');
-                Artisan::call('optimize');
+                Artisan::call('config:clear');
+                // Artisan::call('optimize');
             } catch (\Exception $e) {
                 nlog("I wasn't able to optimize.");
                 nlog($e->getMessage());

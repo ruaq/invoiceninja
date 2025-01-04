@@ -4,7 +4,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -15,10 +15,11 @@ use App\Models\Client;
 use App\Models\Invoice;
 use App\Models\RecurringInvoice;
 use App\Utils\Helpers;
+use Carbon\Carbon;
 
 class RecurringInvoiceToInvoiceFactory
 {
-    public static function create(RecurringInvoice $recurring_invoice, Client $client) :Invoice
+    public static function create(RecurringInvoice $recurring_invoice, Client $client): Invoice
     {
         $invoice = new Invoice();
         $invoice->status_id = Invoice::STATUS_DRAFT;
@@ -26,7 +27,7 @@ class RecurringInvoiceToInvoiceFactory
         $invoice->is_amount_discount = $recurring_invoice->is_amount_discount;
         $invoice->po_number = $recurring_invoice->po_number;
         $invoice->footer = $recurring_invoice->footer ? self::tranformObject($recurring_invoice->footer, $client) : null;
-        $invoice->terms = $recurring_invoice->terms ? self::tranformObject($recurring_invoice->terms, $client) :  null;
+        $invoice->terms = $recurring_invoice->terms ? self::tranformObject($recurring_invoice->terms, $client) : null;
         $invoice->public_notes = $recurring_invoice->public_notes ? self::tranformObject($recurring_invoice->public_notes, $client) : null;
         $invoice->private_notes = $recurring_invoice->private_notes;
         $invoice->is_deleted = $recurring_invoice->is_deleted;
@@ -45,6 +46,7 @@ class RecurringInvoiceToInvoiceFactory
         $invoice->custom_value4 = $recurring_invoice->custom_value4;
         $invoice->amount = $recurring_invoice->amount;
         $invoice->uses_inclusive_taxes = $recurring_invoice->uses_inclusive_taxes;
+        $invoice->is_proforma = $recurring_invoice->is_proforma;
 
         $invoice->custom_surcharge1 = $recurring_invoice->custom_surcharge1;
         $invoice->custom_surcharge2 = $recurring_invoice->custom_surcharge2;
@@ -70,11 +72,16 @@ class RecurringInvoiceToInvoiceFactory
 
     private static function transformItems($recurring_invoice, $client)
     {
+        $currentDateTime = null;
         $line_items = $recurring_invoice->line_items;
+
+        if (isset($recurring_invoice->next_send_date)) {
+            $currentDateTime = Carbon::parse($recurring_invoice->next_send_date)->timezone($client->timezone()->name);
+        }
 
         foreach ($line_items as $key => $item) {
             if (property_exists($line_items[$key], 'notes')) {
-                $line_items[$key]->notes = Helpers::processReservedKeywords($item->notes, $client);
+                $line_items[$key]->notes = Helpers::processReservedKeywords($item->notes, $client, $currentDateTime);
             }
         }
 

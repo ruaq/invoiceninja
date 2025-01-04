@@ -6,7 +6,7 @@
         <div class="bg-white shadow overflow-hidden sm:rounded-lg">
             <div class="px-4 py-5 border-b border-gray-200 sm:px-6">
                 <h3 class="text-lg leading-6 font-medium text-gray-900">
-                   {{ $subscription->name }}.
+                   {{ $subscription->name }}
                 </h3>
             </div>
             <div>
@@ -73,7 +73,7 @@
             </div>
         @endif
 
-        @if($invoice->subscription && $invoice->subscription?->allow_cancellation)
+        @if($invoice->subscription && $invoice->subscription?->allow_cancellation && $invoice->status_id == 2)
         <div class="bg-white shadow sm:rounded-lg mt-4">
             <div class="px-4 py-5 sm:p-6">
                 <div class="sm:flex sm:items-start sm:justify-between">
@@ -92,10 +92,10 @@
         </div>
         @endif
 
-        @if($invoice->subscription && $invoice->subscription->allow_plan_changes)
+        @if($invoice->subscription && $invoice->subscription->allow_plan_changes && count($invoice->subscription->service()->getPlans()) > 0)
             <div class="bg-white shadow overflow-hidden px-4 py-5 lg:rounded-lg mt-4">
                 <h3 class="text-lg leading-6 font-medium text-gray-900">{{ ctrans('texts.change_plan') }}</h3>
-                <p class="mt-1 max-w-2xl text-sm leading-5 text-gray-500">Upgrade or downgrade your current plan.</p>
+                <p class="mt-1 max-w-2xl text-sm leading-5 text-gray-500">{{ ctrans('texts.change_plan_description') }}</p>
 
                 <div class="flex mt-4 space-x-2">
                     @foreach($invoice->subscription->service()->getPlans() as $subscription)

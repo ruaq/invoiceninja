@@ -13,7 +13,6 @@ namespace Tests\Unit;
 
 use App\Factory\InvoiceItemFactory;
 use App\Helpers\Invoice\ProRata;
-use App\Helpers\Subscription\SubscriptionCalculator;
 use App\Models\Invoice;
 use App\Models\Subscription;
 use Illuminate\Support\Carbon;
@@ -21,7 +20,7 @@ use Tests\MockUnitData;
 use Tests\TestCase;
 
 /**
- * @test
+ * 
  */
 class SubscriptionsCalcTest extends TestCase
 {
@@ -79,24 +78,24 @@ class SubscriptionsCalcTest extends TestCase
         $this->assertEquals(10, $invoice->amount);
         $this->assertEquals(10, $invoice->balance);
 
-        $sub_calculator = new SubscriptionCalculator($target->fresh(), $invoice->fresh());
+        $sub_calculator = $target->calc();
 
-        $this->assertFalse($sub_calculator->isPaidUp());
+        $this->assertFalse($sub_calculator->isPaidUp($invoice));
 
         $invoice = $invoice->service()->markPaid()->save();
 
-        $this->assertTrue($sub_calculator->isPaidUp());
+        $this->assertTrue($sub_calculator->isPaidUp($invoice));
 
         $this->assertEquals(10, $invoice->amount);
         $this->assertEquals(0, $invoice->balance);
 
-        $pro_rata = new ProRata;
+        $pro_rata = new ProRata();
 
         $refund = $pro_rata->refund($invoice->amount, Carbon::parse('2021-01-01'), Carbon::parse('2021-01-06'), $subscription->frequency_id);
 
         // $this->assertEquals(1.61, $refund);
 
-        $pro_rata = new ProRata;
+        $pro_rata = new ProRata();
 
         $upgrade = $pro_rata->charge($target->price, Carbon::parse('2021-01-01'), Carbon::parse('2021-01-06'), $subscription->frequency_id);
 
@@ -105,7 +104,6 @@ class SubscriptionsCalcTest extends TestCase
 
     public function testProrataDiscountRatioPercentage()
     {
-
         $subscription = Subscription::factory()->create([
             'company_id' => $this->company->id,
             'user_id' => $this->user->id,
@@ -157,12 +155,10 @@ class SubscriptionsCalcTest extends TestCase
         $ratio = $subscription->service()->calculateDiscountRatio($invoice);
 
         $this->assertEquals(.1, $ratio);
-
     }
 
     public function testProrataDiscountRatioAmount()
     {
-
         $subscription = Subscription::factory()->create([
             'company_id' => $this->company->id,
             'user_id' => $this->user->id,
@@ -214,9 +210,5 @@ class SubscriptionsCalcTest extends TestCase
         $ratio = $subscription->service()->calculateDiscountRatio($invoice);
 
         $this->assertEquals(.2, $ratio);
-
     }
-
-
-
 }

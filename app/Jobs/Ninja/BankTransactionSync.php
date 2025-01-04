@@ -4,27 +4,31 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Jobs\Ninja;
 
-use App\Jobs\Bank\ProcessBankTransactions;
+use App\Jobs\Bank\ProcessBankTransactionsYodlee;
+use App\Jobs\Bank\ProcessBankTransactionsNordigen;
 use App\Libraries\MultiDB;
 use App\Models\Account;
+use App\Models\BankIntegration;
 use App\Utils\Ninja;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Cache;
 
 class BankTransactionSync implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
     /**
      * Create a new job instance.
@@ -44,30 +48,60 @@ class BankTransactionSync implements ShouldQueue
      */
     public function handle()
     {
-        //multiDB environment, need to
-        foreach (MultiDB::$dbs as $db) 
-        {
-            MultiDB::setDB($db);
+        if (config('ninja.db.multi_db_enabled')) {
 
-            nlog("syncing transactions");
+            foreach (MultiDB::$dbs as $db) {
+                MultiDB::setDB($db);
 
-                $a = Account::with('bank_integrations')->whereNotNull('bank_integration_account_id')->cursor()->each(function ($account){
+                $this->processYodlee();
+                $this->processNordigen();
+            }
 
-                    // $queue = Ninja::isHosted() ? 'bank' : 'default';
-
-                    if($account->isPaid() && $account->plan == 'enterprise')
-                    {
-
-                        $account->bank_integrations()->where('auto_sync', true)->cursor()->each(function ($bank_integration) use ($account){
-                            
-                            (new ProcessBankTransactions($account->bank_integration_account_id, $bank_integration))->handle();
-
-                        });
-
-                    }
-
-                });
+        } else {
+            $this->processYodlee();
+            $this->processNordigen();
         }
+
+        nlog("syncing transactions - done");
     }
 
+    private function processYodlee()
+    {
+        if (Ninja::isHosted()) {
+            nlog("syncing transactions - yodlee");
+
+            Account::with('bank_integrations')->whereNotNull('bank_integration_account_id')->cursor()->each(function ($account) {
+
+                if ($account->isEnterprisePaidClient()) {
+                    $account->bank_integrations()->where('integration_type', BankIntegration::INTEGRATION_TYPE_YODLEE)->where('auto_sync', true)->where('disabled_upstream', 0)->cursor()->each(function ($bank_integration) use ($account) {
+                        (new ProcessBankTransactionsYodlee($account->bank_integration_account_id, $bank_integration))->handle();
+                    });
+                }
+
+            });
+        }
+    }
+    private function processNordigen()
+    {
+        if (config("ninja.nordigen.secret_id") && config("ninja.nordigen.secret_key")) {
+            nlog("syncing transactions - nordigen");
+
+            Account::with('bank_integrations')->cursor()->each(function ($account) {
+
+                if ((Ninja::isSelfHost() || (Ninja::isHosted() && $account->isEnterprisePaidClient()))) {
+                    $account->bank_integrations()->where('integration_type', BankIntegration::INTEGRATION_TYPE_NORDIGEN)->where('auto_sync', true)->where('disabled_upstream', 0)->cursor()->each(function ($bank_integration) {
+                        try {
+                            (new ProcessBankTransactionsNordigen($bank_integration))->handle();
+                        } catch (\Exception $e) {
+                            nlog("Exception:: BankTransactioSync::" . $e->getMessage());
+                            sleep(20);
+                        }
+
+                        sleep(5);
+                    });
+                }
+
+            });
+        }
+    }
 }

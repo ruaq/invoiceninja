@@ -4,14 +4,13 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Utils\Traits;
 
-use App\DataMapper\ClientSettings;
 use App\DataMapper\CompanySettings;
 use stdClass;
 
@@ -32,7 +31,7 @@ trait ClientGroupSettingsSaver
      * Works for groups|clients|companies
      * @param  array|object $settings The request input settings array
      * @param  object $entity   The entity which the settings belongs to
-     * @return void
+     * @return array|object
      */
     public function saveSettings($settings, $entity)
     {
@@ -87,6 +86,12 @@ trait ClientGroupSettingsSaver
             unset($settings->translations);
         }
 
+        foreach (['translations','pdf_variables'] as $key) {
+            if (property_exists($settings, $key)) {
+                unset($settings->{$key});
+            }
+        }
+
         //18-07-2022 removed || empty($settings->{$key}) from this check to allow "0" values to persist
         foreach ($settings as $key => $value) {
             if (! isset($settings->{$key}) || (! is_object($settings->{$key}) && strlen($settings->{$key}) == 0)) {
@@ -110,8 +115,7 @@ trait ClientGroupSettingsSaver
 
                 continue;
             }
-            /*Separate loop if it is a _id field which is an integer cast as a string*/
-            elseif (substr($key, -3) == '_id' ||
+            /*Separate loop if it is a _id field which is an integer cast as a string*/ elseif (substr($key, -3) == '_id' ||
                 substr($key, -14) == 'number_counter' ||
                 ($key == 'payment_terms' && property_exists($settings, 'payment_terms') && strlen($settings->{$key}) >= 1) ||
                 ($key == 'valid_until' && property_exists($settings, 'valid_until') && strlen($settings->{$key}) >= 1)) {
@@ -151,7 +155,7 @@ trait ClientGroupSettingsSaver
      * @param  array $settings The settings request() array
      * @return stdClass          stdClass object
      */
-    private function checkSettingType($settings) : stdClass
+    private function checkSettingType($settings): stdClass
     {
         $settings = (object) $settings;
         $casts = CompanySettings::$casts;
@@ -211,7 +215,7 @@ trait ClientGroupSettingsSaver
      * @param  string $value The object property
      * @return bool        TRUE if the property is the expected type
      */
-    private function checkAttribute($key, $value) :bool
+    private function checkAttribute($key, $value): bool
     {
         switch ($key) {
             case 'int':
@@ -234,7 +238,7 @@ trait ClientGroupSettingsSaver
             case 'json':
                 json_decode($value);
 
-                    return json_last_error() == JSON_ERROR_NONE;
+                return json_last_error() == JSON_ERROR_NONE;
             default:
                 return false;
         }

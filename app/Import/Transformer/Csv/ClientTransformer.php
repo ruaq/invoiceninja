@@ -1,10 +1,10 @@
 <?php
 /**
- * client Ninja (https://clientninja.com).
+ * Invoice Ninja (https://invoiceninja.com).
  *
- * @link https://github.com/clientninja/clientninja source repository
+ * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. client Ninja LLC (https://clientninja.com)
+ * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -26,16 +26,21 @@ class ClientTransformer extends BaseTransformer
      *
      * @return array|bool
      */
-    public function transform($data)
+    public function transform($client_data)
     {
-        if (isset($data->name) && $this->getString($data, 'client.name')) {
+        $data = reset($client_data);
+
+        if (isset($data['client.name']) && $this->hasClient($data['client.name'])) {
             throw new ImportException('Client already exists');
         }
 
+        if(!is_array($data))
+            throw new ImportException('Empty row, or invalid data encountered.');
+        
         $settings = ClientSettings::defaults();
         $settings->currency_id = (string) $this->getCurrencyByCode($data);
 
-        return [
+        $client = [
             'company_id' => $this->company->id,
             'name' => $this->getString($data, 'client.name'),
             'phone' => $this->getString($data, 'client.phone'),
@@ -70,52 +75,54 @@ class ClientTransformer extends BaseTransformer
             'custom_value2' => $this->getString($data, 'client.custom_value2'),
             'custom_value3' => $this->getString($data, 'client.custom_value3'),
             'custom_value4' => $this->getString($data, 'client.custom_value4'),
-            'balance' => preg_replace(
-                '/[^0-9,.]+/',
-                '',
-                $this->getFloat($data, 'client.balance')
-            ),
-            'paid_to_date' => preg_replace(
-                '/[^0-9,.]+/',
-                '',
-                $this->getFloat($data, 'client.paid_to_date')
-            ),
+            'paid_to_date' => 0,
+            'balance' => 0,
             'credit_balance' => 0,
             'settings' => $settings,
             'client_hash' => Str::random(40),
-            'contacts' => [
-                [
-                    'first_name' => $this->getString(
-                        $data,
-                        'contact.first_name'
-                    ),
-                    'last_name' => $this->getString($data, 'contact.last_name'),
-                    'email' => $this->getString($data, 'contact.email'),
-                    'phone' => $this->getString($data, 'contact.phone'),
-                    'custom_value1' => $this->getString(
-                        $data,
-                        'contact.custom_value1'
-                    ),
-                    'custom_value2' => $this->getString(
-                        $data,
-                        'contact.custom_value2'
-                    ),
-                    'custom_value3' => $this->getString(
-                        $data,
-                        'contact.custom_value3'
-                    ),
-                    'custom_value4' => $this->getString(
-                        $data,
-                        'contact.custom_value4'
-                    ),
-                ],
-            ],
-            'country_id' => isset($data['client.country'])
-                ? $this->getCountryId($data['client.country'])
+            'country_id' => isset($data['client.country_id'])
+                ? $this->getCountryId($data['client.country_id'])
                 : null,
             'shipping_country_id' => isset($data['client.shipping_country'])
                 ? $this->getCountryId($data['client.shipping_country'])
                 : null,
         ];
+
+        $contacts = [];
+
+        foreach ($client_data as $data) {
+            $contacts[] = [
+                'first_name' => $this->getString(
+                    $data,
+                    'contact.first_name'
+                ),
+                'last_name' => $this->getString($data, 'contact.last_name'),
+                'email' => $this->getString($data, 'contact.email'),
+                'phone' => $this->getString($data, 'contact.phone'),
+                'custom_value1' => $this->getString(
+                    $data,
+                    'contact.custom_value1'
+                ),
+                'custom_value2' => $this->getString(
+                    $data,
+                    'contact.custom_value2'
+                ),
+                'custom_value3' => $this->getString(
+                    $data,
+                    'contact.custom_value3'
+                ),
+                'custom_value4' => $this->getString(
+                    $data,
+                    'contact.custom_value4'
+                ),
+            ];
+        }
+
+        $client['contacts'] = $contacts;
+
+        nlog($client);
+
+        return $client;
+
     }
 }

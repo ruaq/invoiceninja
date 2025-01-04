@@ -1,10 +1,10 @@
 <?php
 /**
- * client Ninja (https://clientninja.com).
+ * Invoice Ninja (https://invoiceninja.com).
  *
- * @link https://github.com/clientninja/clientninja source repository
+ * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. client Ninja LLC (https://clientninja.com)
+ * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -14,7 +14,6 @@ namespace App\Import\Transformer\Freshbooks;
 use App\Import\ImportException;
 use App\Import\Transformer\BaseTransformer;
 use App\Models\Invoice;
-use App\Utils\Number;
 
 /**
  * Class InvoiceTransformer.
@@ -43,8 +42,7 @@ class InvoiceTransformer extends BaseTransformer
             'company_id'  => $this->company->id,
             'client_id'   => $this->getClient($this->getString($invoice_data, 'Client Name'), null),
             'number'      => $this->getString($invoice_data, 'Invoice #'),
-            'date'        => isset($invoice_data['Date Issued']) ? date('Y-m-d', strtotime($invoice_data['Date Issued'])) : null,
-            // 'currency_id' => $this->getCurrencyByCode( $invoice_data, 'Currency' ),
+            'date'        => isset($invoice_data['Date Issued']) ? $this->parseDate($invoice_data['Date Issued']) : null,
             'amount'      => 0,
             'status_id'   => $invoiceStatusMap[$status =
                     strtolower($this->getString($invoice_data, 'Invoice Status'))] ?? Invoice::STATUS_SENT,
@@ -71,7 +69,7 @@ class InvoiceTransformer extends BaseTransformer
 
         if (! empty($invoice_data['Date Paid'])) {
             $transformed['payments'] = [[
-                'date'   => date('Y-m-d', strtotime($invoice_data['Date Paid'])),
+                'date'   => $this->parseDate($invoice_data['Date Paid']),
                 'amount' => $transformed['amount'],
             ]];
         }
@@ -82,8 +80,9 @@ class InvoiceTransformer extends BaseTransformer
     //Line Subtotal
     public function calcTaxRate($record, $field)
     {
-        if(isset($record['Line Subtotal']) && $record['Line Subtotal'] > 0)
+        if (isset($record['Line Subtotal']) && $record['Line Subtotal'] > 0) {
             return ($record[$field] / $record['Line Subtotal']) * 100;
+        }
 
         $tax_amount1 = isset($record['Tax 1 Amount']) ? $record['Tax 1 Amount'] : 0;
 
@@ -93,11 +92,11 @@ class InvoiceTransformer extends BaseTransformer
 
         $subtotal = $line_total - $tax_amount2 - $tax_amount1;
 
-        if($subtotal > 0)
+        if ($subtotal > 0) {
             return $record[$field] / $subtotal * 100;
+        }
 
         return 0;
-
     }
 
     /** @return float  */

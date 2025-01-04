@@ -5,7 +5,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -17,6 +17,7 @@ use App\Models\Design;
 use App\Models\Invoice;
 use App\Services\PdfMaker\Design as PdfMakerDesign;
 use App\Services\PdfMaker\PdfMaker as PdfMakerService;
+use App\Services\Template\TemplateService;
 use App\Utils\HostedPDF\NinjaPdf;
 use App\Utils\HtmlEngine;
 use App\Utils\PhantomJS\Phantom;
@@ -26,47 +27,51 @@ use Illuminate\Support\Facades\Storage;
 
 class GenerateDeliveryNote
 {
-    use MakesHash, PdfMaker;
-
-    /**
-     * @var \App\Models\Invoice
-     */
-    private $invoice;
-
-    /**
-     * @var \App\Models\ClientContact
-     */
-    private $contact;
+    use MakesHash;
+    use PdfMaker;
 
     /**
      * @var mixed
      */
     private $disk;
 
-    public function __construct(Invoice $invoice, ClientContact $contact = null, $disk = null)
+    public function __construct(private Invoice $invoice, private ?ClientContact $contact = null, $disk = null)
     {
-        $this->invoice = $invoice;
-
-        $this->contact = $contact;
-
         $this->disk = $disk ?? config('filesystems.default');
     }
 
     public function run()
     {
+
+        $delivery_note_design_id = $this->invoice->client->getSetting('delivery_note_design_id');
+        $design = Design::withTrashed()->find($this->decodePrimaryKey($delivery_note_design_id));
+
+        if ($design && $design->is_template) {
+
+            $ts = new TemplateService($design);
+
+            $pdf = $ts->setCompany($this->invoice->company)
+            ->build([
+                'invoices' => collect([$this->invoice]),
+            ])->getPdf();
+
+            return $pdf;
+
+        }
+
         $design_id = $this->invoice->design_id
             ? $this->invoice->design_id
             : $this->decodePrimaryKey($this->invoice->client->getSetting('invoice_design_id'));
 
         $invitation = $this->invoice->invitations->first();
-        // $file_path = sprintf('%s%s_delivery_note.pdf', $this->invoice->client->invoice_filepath($invitation), $this->invoice->number);
-        $file_path = sprintf('%sdelivery_note.pdf', $this->invoice->client->invoice_filepath($invitation));
+
+        // return (new \App\Services\Pdf\PdfService($invitation, 'delivery_note'))->boot()->getPdf();
 
         if (config('ninja.phantomjs_pdf_generation') || config('ninja.pdf_generator') == 'phantom') {
-            return (new Phantom)->generate($this->invoice->invitations->first());
+            return (new Phantom())->generate($this->invoice->invitations->first());
         }
 
-        $design = Design::find($design_id);
+        $design = Design::withTrashed()->find($design_id);
         $html = new HtmlEngine($invitation);
 
         if ($design->is_custom) {
@@ -76,6 +81,11 @@ class GenerateDeliveryNote
             $template = new PdfMakerDesign(strtolower($design->name));
         }
 
+        $variables = $html->generateLabelsAndValues();
+        $variables['labels']['$entity_label'] = ctrans('texts.delivery_note');
+        $variables['labels']['$invoice.date_label'] = ctrans('texts.date');
+        $variables['labels']['$invoice.number_label'] = ctrans('texts.number');
+
         $state = [
             'template' => $template->elements([
                 'client' => $this->invoice->client,
@@ -83,7 +93,12 @@ class GenerateDeliveryNote
                 'pdf_variables' => (array) $this->invoice->company->settings->pdf_variables,
                 'contact' => $this->contact,
             ], 'delivery_note'),
-            'variables' => $html->generateLabelsAndValues(),
+            'variables' => $variables,
+            'options' => [
+                'client' => $this->invoice->client,
+                'entity' => $this->invoice,
+                'contact' => $this->contact,
+            ],
             'process_markdown' => $this->invoice->client->company->markdown_enabled,
         ];
 
@@ -92,8 +107,6 @@ class GenerateDeliveryNote
         $maker
             ->design($template)
             ->build();
-
-        // Storage::makeDirectory($this->invoice->client->invoice_filepath(), 0775);
 
         if (config('ninja.invoiceninja_hosted_pdf_generation') || config('ninja.pdf_generator') == 'hosted_ninja') {
             $pdf = (new NinjaPdf())->build($maker->getCompiledHTML(true));
@@ -105,11 +118,10 @@ class GenerateDeliveryNote
             info($maker->getCompiledHTML());
         }
 
-        Storage::disk($this->disk)->put($file_path, $pdf);
-
         $maker = null;
         $state = null;
-        
-        return $file_path;
+
+        return $pdf;
+
     }
 }

@@ -5,7 +5,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -51,13 +51,16 @@ class OtpCode extends Mailable
         return $this->from(config('mail.from.address'), config('mail.from.name'))
             ->subject(ctrans('texts.otp_code_subject'))
             ->text('email.admin.generic_text')
-            ->view('email.admin.generic')
+            ->view('email.client.generic')
             ->with([
                 'settings' => $this->company->settings,
                 'logo' => $this->company->present()->logo(),
                 'title' => ctrans('texts.otp_code_subject'),
                 'content' => ctrans('texts.otp_code_body', ['code' => $this->code]),
                 'whitelabel' => $this->company->account->isPaid(),
+                'url' => false,
+                'button' => false,
+                'template' => $this->company->account->isPremium() ? 'email.template.admin_premium' : 'email.template.admin',
             ]);
     }
 }

@@ -4,38 +4,29 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Services\Invoice;
 
-use App\Jobs\Entity\EmailEntity;
-use App\Models\ClientContact;
+use App\Utils\Ninja;
 use App\Models\Invoice;
+use App\Models\Webhook;
+use App\Models\ClientContact;
+use App\Jobs\Entity\EmailEntity;
 use App\Services\AbstractService;
+use App\Events\Invoice\InvoiceWasEmailed;
 
 class SendEmail extends AbstractService
 {
-    protected $invoice;
-
-    protected $reminder_template;
-
-    protected $contact;
-
-    public function __construct(Invoice $invoice, $reminder_template = null, ClientContact $contact = null)
+    public function __construct(protected Invoice $invoice, protected $reminder_template = null, protected ?ClientContact $contact = null)
     {
-        $this->invoice = $invoice;
-
-        $this->reminder_template = $reminder_template;
-
-        $this->contact = $contact;
     }
 
     /**
      * Builds the correct template to send.
-     * @return void
      */
     public function run()
     {
@@ -45,8 +36,16 @@ class SendEmail extends AbstractService
 
         $this->invoice->invitations->each(function ($invitation) {
             if (! $invitation->contact->trashed() && $invitation->contact->email) {
-                EmailEntity::dispatch($invitation, $invitation->company, $this->reminder_template)->delay(10);
+                EmailEntity::dispatch($invitation->withoutRelations(), $invitation->company->db, $this->reminder_template)->delay(10);
             }
         });
+
+        if ($this->invoice->invitations->count() >= 1) {
+            // event(new InvoiceWasEmailed($this->invoice->invitations->first(), $this->invoice->company, Ninja::eventVars(auth()->user() ? auth()->user()->id : null), $this->reminder_template ?? 'invoice'));
+            $this->invoice->entityEmailEvent($this->invoice->invitations->first(), $this->reminder_template ?? 'invoice');
+            $this->invoice->sendEvent(Webhook::EVENT_SENT_INVOICE, "client");
+
+        }
+
     }
 }

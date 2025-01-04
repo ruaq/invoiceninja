@@ -15,21 +15,19 @@ use App\Utils\Traits\MakesHash;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Session;
-use Illuminate\Validation\ValidationException;
 use Tests\MockAccountData;
 use Tests\TestCase;
 
-/**
- * @test
- * @covers App\Http\Controllers\BankIntegrationController
- */
+
 class BankIntegrationApiTest extends TestCase
 {
     use MakesHash;
     use DatabaseTransactions;
     use MockAccountData;
 
-    protected function setUp() :void
+    protected $faker;
+
+    protected function setUp(): void
     {
         parent::setUp();
 
@@ -41,6 +39,21 @@ class BankIntegrationApiTest extends TestCase
 
         Model::reguard();
     }
+
+
+    public function testBankIntegrationPost()
+    {
+        $data = [
+            'bank_account_name' => 'Nuevo Banko',
+        ];
+
+        $response = $this->withHeaders([
+            'X-API-TOKEN' => $this->token,
+        ])->post('/api/v1/bank_integrations/', $data);
+
+        $response->assertStatus(200);
+    }
+
 
     public function testBankIntegrationGet()
     {

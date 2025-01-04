@@ -5,9 +5,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
-
+return new class extends Migration {
     use AppSetup;
 
     /**
@@ -23,8 +21,6 @@ return new class extends Migration
 
         \Illuminate\Support\Facades\Artisan::call('ninja:design-update');
 
-        $this->buildCache(true);
-
     }
 
     /**
@@ -34,6 +30,5 @@ return new class extends Migration
      */
     public function down()
     {
-
     }
 };

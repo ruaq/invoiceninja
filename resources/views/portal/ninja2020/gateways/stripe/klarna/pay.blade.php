@@ -19,6 +19,7 @@
     <meta name="postal_code" content="{{ $gateway->client->postal_code }}">
     <meta name="pi-client-secret" content="{{ $pi_client_secret }}">
     <meta name="translation-name-without-special-characters" content="{{ ctrans('texts.name_without_special_characters') }}">
+    <meta name="instant-payment" content="yes" />
 @endsection
 
 @section('gateway_content')
@@ -35,5 +36,5 @@
 
 @push('footer')
     <script src="https://js.stripe.com/v3/"></script>
-    <script src="{{ asset('js/clients/payments/stripe-klarna.js') }}"></script>
+    @vite('resources/js/clients/payments/stripe-klarna.js')
 @endpush

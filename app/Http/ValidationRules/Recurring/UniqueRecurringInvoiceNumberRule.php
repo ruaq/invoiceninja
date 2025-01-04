@@ -4,7 +4,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -47,13 +47,13 @@ class UniqueRecurringInvoiceNumberRule implements Rule
     /**
      * @return bool
      */
-    private function checkIfInvoiceNumberUnique() : bool
+    private function checkIfInvoiceNumberUnique(): bool
     {
         if (empty($this->input['number'])) {
             return true;
         }
 
-        $invoice = RecurringInvoice::where('client_id', $this->input['client_id'])
+        $invoice = RecurringInvoice::query()->where('client_id', $this->input['client_id'])
                         ->where('number', $this->input['number'])
                         ->withTrashed()
                         ->exists();

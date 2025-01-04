@@ -4,7 +4,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -15,14 +15,13 @@ use App\Models\Scheduler;
 
 class SchedulerRepository extends BaseRepository
 {
-
     /**
      * Saves the scheduler.
      *
      * @param      array                     $data     The data
      * @param      \App\Models\Scheduler     $scheduler  The scheduler
      *
-     * @return     \App\Models\Scheduler 
+     * @return     \App\Models\Scheduler
      */
     public function save(array $data, Scheduler $scheduler): Scheduler
     {
@@ -31,8 +30,8 @@ class SchedulerRepository extends BaseRepository
 
         $scheduler->save();
 
-        return $scheduler;
-        
-    }
+        $scheduler->adjustOffset();
 
+        return $scheduler->fresh();
+    }
 }

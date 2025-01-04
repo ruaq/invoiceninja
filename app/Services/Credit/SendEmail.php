@@ -4,17 +4,18 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Services\Credit;
 
-use App\Helpers\Email\CreditEmail;
-use App\Jobs\Credit\EmailCredit;
-use App\Jobs\Entity\EmailEntity;
+use App\Utils\Ninja;
+use App\Models\Webhook;
 use App\Models\ClientContact;
+use App\Jobs\Entity\EmailEntity;
+use App\Events\Credit\CreditWasEmailed;
 
 class SendEmail
 {
@@ -35,7 +36,6 @@ class SendEmail
 
     /**
      * Builds the correct template to send.
-     * @return void
      */
     public function run()
     {
@@ -43,12 +43,19 @@ class SendEmail
             $this->reminder_template = $this->credit->calculateTemplate('credit');
         }
 
+        $this->credit->service()->markSent()->save();
+
         $this->credit->invitations->each(function ($invitation) {
             if (! $invitation->contact->trashed() && $invitation->contact->email) {
-                EmailEntity::dispatch($invitation, $invitation->company, $this->reminder_template)->delay(2);
+                EmailEntity::dispatch($invitation->withoutRelations(), $invitation->company->db, $this->reminder_template)->delay(2);
             }
         });
 
-        $this->credit->service()->markSent()->save();
+        if ($this->credit->invitations->count() >= 1) {
+            event(new CreditWasEmailed($this->credit->invitations->first(), $this->credit->company, Ninja::eventVars(auth()->user() ? auth()->user()->id : null), 'credit'));
+            $this->credit->sendEvent(Webhook::EVENT_SENT_CREDIT, "client");
+
+        }
+
     }
 }

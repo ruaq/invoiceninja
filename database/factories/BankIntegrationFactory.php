@@ -11,9 +11,7 @@
 
 namespace Database\Factories;
 
-use App\Models\Account;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Illuminate\Support\Str;
 
 class BankIntegrationFactory extends Factory
 {
@@ -25,6 +23,7 @@ class BankIntegrationFactory extends Factory
     public function definition()
     {
         return [
+            'integration_type' => null,
             'provider_name' => $this->faker->company(),
             'provider_id' => 1,
             'bank_account_name' => $this->faker->catchPhrase(),

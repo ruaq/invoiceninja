@@ -4,7 +4,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -56,12 +56,11 @@ class DesignUpdate extends Command
         if (! config('ninja.db.multi_db_enabled')) {
             $this->handleOnDb();
         } else {
-
             //multiDB environment, need to
             foreach (MultiDB::$dbs as $db) {
                 MultiDB::setDB($db);
 
-                $this->handleOnDb($db);
+                $this->handleOnDb();
             }
 
             MultiDB::setDB($current_db);
@@ -74,7 +73,7 @@ class DesignUpdate extends Command
             $invoice_design = new \App\Services\PdfMaker\Design(strtolower($design->name));
             $invoice_design->document();
 
-            $design_object = new stdClass;
+            $design_object = new stdClass();
             $design_object->includes = $invoice_design->getSectionHTML('style');
             $design_object->header = $invoice_design->getSectionHTML('header');
             $design_object->body = $invoice_design->getSectionHTML('body');

@@ -4,7 +4,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -18,7 +18,6 @@ use App\Utils\Ninja;
 
 class UpdateUserRequest extends Request
 {
-
     private bool $phone_has_changed = false;
 
     /**
@@ -26,7 +25,7 @@ class UpdateUserRequest extends Request
      *
      * @return bool
      */
-    public function authorize() : bool
+    public function authorize(): bool
     {
         return auth()->user()->id == $this->user->id || auth()->user()->isAdmin();
     }
@@ -39,12 +38,11 @@ class UpdateUserRequest extends Request
             'password' => 'nullable|string|min:6',
         ];
 
-        if (isset($input['email'])) {
-            $rules['email'] = ['email', 'sometimes', new UniqueUserRule($this->user, $input['email'])];
-        }
+        $rules['email'] = ['email', 'sometimes', new UniqueUserRule($this->user, $input['email'])];
 
-        if(Ninja::isHosted() && $this->phone_has_changed && $this->phone && isset($this->phone))
+        if (Ninja::isHosted() && $this->phone_has_changed && $this->phone && isset($this->phone)) {
             $rules['phone'] = ['sometimes', 'bail', 'string', new HasValidPhoneNumber()];
+        }
 
         return $rules;
     }
@@ -53,8 +51,10 @@ class UpdateUserRequest extends Request
     {
         $input = $this->all();
 
-        if (array_key_exists('email', $input)) {
+        if (isset($input['email']) && is_string($input['email']) && strlen($input['email']) > 2) {
             $input['email'] = trim($input['email']);
+        } elseif (isset($input['email'])) {
+            $input['email'] = false;
         }
 
         if (array_key_exists('first_name', $input)) {
@@ -65,14 +65,22 @@ class UpdateUserRequest extends Request
             $input['last_name'] = strip_tags($input['last_name']);
         }
 
-        if(array_key_exists('phone', $input) && isset($input['phone']) && strlen($input['phone']) > 1 && ($this->user->phone != $input['phone'])){
+        if (array_key_exists('phone', $input) && isset($input['phone']) && strlen($input['phone']) > 1 && ($this->user->phone != $input['phone'])) {
             $this->phone_has_changed = true;
         }
 
-        if(array_key_exists('oauth_provider_id', $input) && $input['oauth_provider_id'] == '')
+        if (array_key_exists('oauth_provider_id', $input) && $input['oauth_provider_id'] == '') {
             $input['oauth_user_id'] = '';
+        }
+
+        if (array_key_exists('oauth_user_token', $input) && $input['oauth_user_token'] == '***') {
+            unset($input['oauth_user_token']);
+        }
+
+        if (isset($input['password']) && is_string($input['password'])) {
+            $input['password'] = trim($input['password']);
+        }
 
         $this->replace($input);
     }
-
 }

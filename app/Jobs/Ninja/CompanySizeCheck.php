@@ -4,7 +4,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -12,6 +12,7 @@
 namespace App\Jobs\Ninja;
 
 use App\Libraries\MultiDB;
+use App\Models\Account;
 use App\Models\Client;
 use App\Models\Company;
 use Illuminate\Bus\Queueable;
@@ -22,7 +23,10 @@ use Illuminate\Queue\SerializesModels;
 
 class CompanySizeCheck implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
     /**
      * Create a new job instance.
@@ -42,8 +46,7 @@ class CompanySizeCheck implements ShouldQueue
     public function handle()
     {
         if (! config('ninja.db.multi_db_enabled')) {
-            
-            Company::where('is_large', false)->withCount(['invoices', 'clients', 'products'])->cursor()->each(function ($company) {
+            Company::where('is_large', false)->withCount(['invoices', 'clients', 'products', 'quotes'])->cursor()->each(function ($company) {
                 if ($company->invoices_count > 500 || $company->products_count > 500 || $company->clients_count > 500) {
                     nlog("Marking company {$company->id} as large");
 
@@ -53,15 +56,31 @@ class CompanySizeCheck implements ShouldQueue
 
             nlog("updating all client credit balances");
 
-            Client::where('updated_at', '>', now()->subDay())
+            Client::query()
+                  ->where('updated_at', '>', now()->subDay())
                   ->cursor()
-                  ->each(function ($client){
+                  ->each(function ($client) {
 
-                    $client->credit_balance = $client->service()->getCreditBalance();
-                    $client->save();
+                      $old_credit_balance = $client->credit_balance;
+                      $new_credit_balance = $client->service()->getCreditBalance();
+
+                      if (floatval($old_credit_balance) !== floatval($new_credit_balance)) {
+                          $client->credit_balance = $client->service()->getCreditBalance();
+                          $client->saveQuietly();
+                      }
 
                   });
 
+            /* Ensures lower permissioned users return the correct dataset and refresh responses */
+            Account::whereHas('companies', function ($query) {
+                $query->where('is_large', 0);
+            })
+                  ->whereHas('company_users', function ($query) {
+                      $query->where('is_admin', 0);
+                  })
+                  ->cursor()->each(function ($account) {
+                      $account->companies()->update(['is_large' => true]);
+                  });
         } else {
             //multiDB environment, need to
             foreach (MultiDB::$dbs as $db) {
@@ -69,8 +88,8 @@ class CompanySizeCheck implements ShouldQueue
 
                 nlog("Company size check db {$db}");
 
-                Company::where('is_large', false)->withCount(['invoices', 'clients', 'products'])->cursor()->each(function ($company) {
-                    if ($company->invoices_count > 500 || $company->products_count > 500 || $company->clients_count > 500) {
+                Company::where('is_large', false)->withCount(['invoices', 'clients', 'products', 'quotes'])->cursor()->each(function ($company) {
+                    if ($company->invoices_count > 500 || $company->products_count > 500 || $company->clients_count > 500 || $company->quotes_count > 500) {
                         nlog("Marking company {$company->id} as large");
 
                         $company->account->companies()->update(['is_large' => true]);
@@ -79,17 +98,34 @@ class CompanySizeCheck implements ShouldQueue
 
                 nlog("updating all client credit balances");
 
-                Client::where('updated_at', '>', now()->subDay())
+                Client::query()->where('updated_at', '>', now()->subDay())
                       ->cursor()
-                      ->each(function ($client){
+                      ->each(function ($client) {
 
-                        $client->credit_balance = $client->service()->getCreditBalance();
-                        $client->save();
+
+                          $old_credit_balance = $client->credit_balance;
+                          $new_credit_balance = $client->service()->getCreditBalance();
+
+                          if (floatval($old_credit_balance) !== floatval($new_credit_balance)) {
+                              $client->credit_balance = $client->service()->getCreditBalance();
+                              $client->saveQuietly();
+                          }
+
 
                       });
 
+                Account::where('plan', 'enterprise')
+                      ->whereDate('plan_expires', '>', now())
+                      ->whereHas('companies', function ($query) {
+                          $query->where('is_large', 0);
+                      })
+                      ->whereHas('company_users', function ($query) {
+                          $query->where('is_admin', 0);
+                      })
+                      ->cursor()->each(function ($account) {
+                          $account->companies()->update(['is_large' => true]);
+                      });
             }
         }
     }
-
 }

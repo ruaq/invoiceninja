@@ -4,18 +4,14 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Filters;
 
-use App\Models\Design;
-use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Gate;
 
 /**
  * DesignFilters.
@@ -25,77 +21,96 @@ class DesignFilters extends QueryFilters
     /**
      * Filter based on search text.
      *
-     * @param string query filter
+     * @param string $filter
      * @return Builder
-     * @deprecated
+     *
      */
-    public function filter(string $filter = '') : Builder
+    public function filter(string $filter = ''): Builder
     {
         if (strlen($filter) == 0) {
             return $this->builder;
         }
 
-        return  $this->builder->where(function ($query) use ($filter) {
-            $query->where('designs.name', 'like', '%'.$filter.'%');
+        return $this->builder->where(function ($query) use ($filter) {
+            $query->where('name', 'like', '%'.$filter.'%');
         });
     }
 
     /**
      * Sorts the list based on $sort.
      *
-     * @param string sort formatted as column|asc
+     * @param string $sort formatted as column|asc
+     *
      * @return Builder
      */
-    public function sort(string $sort) : Builder
+    public function sort(string $sort = ''): Builder
     {
         $sort_col = explode('|', $sort);
 
-        return $this->builder->orderBy($sort_col[0], $sort_col[1]);
-    }
-
-    /**
-     * Returns the base query.
-     *
-     * @param int company_id
-     * @param User $user
-     * @return Builder
-     * @deprecated
-     */
-    public function baseQuery(int $company_id, User $user) : Builder
-    {
-        $query = DB::table('designs')
-            ->join('companies', 'companies.id', '=', 'designs.company_id')
-            ->where('designs.company_id', '=', $company_id)
-            ->select(
-                'designs.id',
-                'designs.name',
-                'designs.design',
-                'designs.created_at',
-                'designs.created_at as design_created_at',
-                'designs.deleted_at',
-                'designs.is_deleted',
-                'designs.user_id',
-            );
-
-        /*
-         * If the user does not have permissions to view all invoices
-         * limit the user to only the invoices they have created
-         */
-        if (Gate::denies('view-list', Design::class)) {
-            $query->where('designs.user_id', '=', $user->id);
+        if (!is_array($sort_col) || count($sort_col) != 2) {
+            return $this->builder;
         }
 
-        return $query;
+        $dir = ($sort_col[1] == 'asc') ? 'asc' : 'desc';
+
+        return $this->builder->orderBy($sort_col[0], $dir);
+    }
+
+    public function entities(string $entities = ''): Builder
+    {
+
+        if (stripos($entities, 'statement') !== false) {
+            $entities = 'client';
+        }
+
+        if (strlen($entities) == 0 || str_contains($entities, ',')) {
+            return $this->builder;
+        }
+
+        return $this->builder
+                    ->where('is_template', true)
+                    ->whereRaw('FIND_IN_SET( ? ,entities)', [trim($entities)]);
+
     }
 
     /**
      * Filters the query by the users company ID.
      *
-     * @return Illuminate\Database\Query\Builder
+     * @return Builder
      */
-    public function entityFilter()
+    public function entityFilter(): Builder
     {
-        //return $this->builder->whereCompanyId(auth()->user()->company()->id);
-        return $this->builder->where('company_id', auth()->user()->company()->id)->orWhere('company_id', null)->orderBy('id','asc');
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        return  $this->builder->where(function ($query) use ($user) {
+            $query->where('company_id', $user->company()->id)->orWhere('company_id', null)->orderBy('id', 'asc');
+        });
+    }
+
+    public function template(string $template = 'false'): Builder
+    {
+
+        if (strlen($template) == 0) {
+            return $this->builder;
+        }
+
+        $bool_val = $template == 'true' ? true : false;
+
+        return $this->builder->where('is_template', $bool_val);
+    }
+
+    /**
+     * Filter the designs by `is_custom` column.
+     *
+     * @return Builder
+     */
+    public function custom(string $custom): Builder
+    {
+        if (strlen($custom) === 0) {
+            return $this->builder;
+        }
+
+        return $this->builder->where('is_custom', filter_var($custom, FILTER_VALIDATE_BOOLEAN));
     }
 }

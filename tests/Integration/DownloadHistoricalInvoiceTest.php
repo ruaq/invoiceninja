@@ -19,31 +19,103 @@ use Tests\MockAccountData;
 use Tests\TestCase;
 
 /**
- * @test
- * @covers App\Http\Controllers\ActivityController
- */
+ * 
+ *  App\Http\Controllers\ActivityController
+*/
 class DownloadHistoricalInvoiceTest extends TestCase
 {
     use MockAccountData;
     use DatabaseTransactions;
     use MakesHash;
 
-    protected function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
         $this->makeTestData();
 
         if (config('ninja.testvars.travis') !== false) {
-            $this->markTestSkipped('Skip test for Travis');
+            $this->markTestSkipped('Skip test for GH Actions');
         }
+    }
+
+    public function testDownloadInvoiceRoute()
+    {
+
+        $response = $this->withHeaders([
+            'X-API-SECRET' => config('ninja.api_secret'),
+            'X-API-TOKEN' => $this->token,
+        ])->get("/api/v1/invoices/{$this->invoice->hashed_id}/download");
+
+        $response->assertStatus(200);
+        $response->assertDownload();
+
+    }
+
+    public function testDownloadDeliveryRoute()
+    {
+
+        $response = $this->withHeaders([
+            'X-API-SECRET' => config('ninja.api_secret'),
+            'X-API-TOKEN' => $this->token,
+        ])->get("/api/v1/invoices/{$this->invoice->hashed_id}/delivery_note");
+
+        $response->assertStatus(200);
+        $response->assertDownload();
+
+    }
+
+    public function testDownloadInvoiceBulkActionRoute()
+    {
+        $data = [
+            'action' => 'download',
+            'ids' => [$this->invoice->hashed_id],
+        ];
+
+        $response = $this->withHeaders([
+            'X-API-SECRET' => config('ninja.api_secret'),
+            'X-API-TOKEN' => $this->token,
+        ])->post("/api/v1/invoices/bulk", $data);
+
+        $response->assertStatus(200);
+        $response->assertDownload();
+
+    }
+
+    public function testDownloadQuoteRoute()
+    {
+
+        $response = $this->withHeaders([
+            'X-API-SECRET' => config('ninja.api_secret'),
+            'X-API-TOKEN' => $this->token,
+        ])->get("/api/v1/quotes/{$this->quote->hashed_id}/download");
+
+        $response->assertStatus(200);
+        $response->assertDownload();
+
+    }
+
+    public function testDownloadQuoteBulkActionRoute()
+    {
+        $data = [
+            'action' => 'download',
+            'ids' => [$this->quote->hashed_id],
+        ];
+
+        $response = $this->withHeaders([
+            'X-API-SECRET' => config('ninja.api_secret'),
+            'X-API-TOKEN' => $this->token,
+        ])->post("/api/v1/quotes/bulk", $data);
+
+        $response->assertStatus(200);
+
     }
 
     private function mockActivity()
     {
         $activity_repo = new ActivityRepository();
 
-        $obj = new \stdClass;
+        $obj = new \stdClass();
         $obj->invoice_id = $this->invoice->id;
         $obj->user_id = $this->invoice->user_id;
         $obj->company_id = $this->company->id;
@@ -57,6 +129,4 @@ class DownloadHistoricalInvoiceTest extends TestCase
 
         $this->assertNotNull($this->invoice->activities);
     }
-
-
 }

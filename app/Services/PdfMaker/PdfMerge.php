@@ -5,29 +5,34 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Services\PdfMaker;
 
-use Illuminate\Support\Facades\Storage;
-use \setasign\Fpdi\Fpdi;
+use setasign\Fpdi\Fpdi;
 use setasign\Fpdi\PdfParser\StreamReader;
 
 class PdfMerge
 {
-
-    public function __construct(private array $file_paths) {}
+    /**
+     * __construct
+     *
+     * @param  array $files
+     * @return void
+     */
+    public function __construct(private array $files)
+    {
+    }
 
     public function run()
     {
-
         $pdf = new FPDI();
 
-        foreach ($this->file_paths as $file) {
-            $pageCount = $pdf->setSourceFile(StreamReader::createByString(Storage::get($file)));
+        foreach ($this->files as $file) {
+            $pageCount = $pdf->setSourceFile(StreamReader::createByString($file));
             for ($i = 0; $i < $pageCount; $i++) {
                 $tpl = $pdf->importPage($i + 1, '/MediaBox');
                 $pdf->addPage();
@@ -36,7 +41,5 @@ class PdfMerge
         }
 
         return $pdf->Output('S');
-
     }
-
 }

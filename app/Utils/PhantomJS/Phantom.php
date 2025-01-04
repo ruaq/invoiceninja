@@ -4,7 +4,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -27,14 +27,14 @@ use App\Utils\HtmlEngine;
 use App\Utils\Traits\MakesHash;
 use App\Utils\Traits\Pdf\PageNumbering;
 use Illuminate\Support\Facades\App;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class Phantom
 {
-    use MakesHash, PageNumbering;
+    use MakesHash;
+    use PageNumbering;
 
     /**
      * Generate a PDF from the
@@ -45,6 +45,7 @@ class Phantom
     public function generate($invitation, $return_pdf = false)
     {
         $entity = false;
+        $path = '';
 
         if ($invitation instanceof InvoiceInvitation) {
             $entity = 'invoice';
@@ -107,13 +108,14 @@ class Phantom
         }
 
         if (! Storage::disk(config('filesystems.default'))->exists($path)) {
-            Storage::disk(config('filesystems.default'))->makeDirectory($path, 0775);
+            Storage::disk(config('filesystems.default'))->makeDirectory($path);
         }
 
         $instance = Storage::disk(config('filesystems.default'))->put($file_path, $pdf);
 
-        if($return_pdf)
+        if ($return_pdf) {
             return $pdf;
+        }
 
         return $file_path;
     }
@@ -190,7 +192,7 @@ class Phantom
 
         $design_id = $entity_obj->design_id ? $entity_obj->design_id : $this->decodePrimaryKey($entity_obj->client->getSetting($entity_design_id));
 
-        $design = Design::find($design_id);
+        $design = Design::withTrashed()->find($design_id);
         $html = new HtmlEngine($invitation);
 
         if ($design->is_custom) {
@@ -213,6 +215,8 @@ class Phantom
             'options' => [
                 'all_pages_header' => $entity_obj->client->getSetting('all_pages_header'),
                 'all_pages_footer' => $entity_obj->client->getSetting('all_pages_footer'),
+                'client' => $entity_obj->client,
+                'entity' => $entity_obj,
             ],
             'process_markdown' => $entity_obj->client->company->markdown_enabled,
         ];
@@ -229,4 +233,5 @@ class Phantom
 
         return view('pdf.html', $data);
     }
+
 }

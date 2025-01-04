@@ -4,7 +4,7 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2024. Invoice Ninja LLC (https://invoiceninja.com)
  *
  * @license https://www.elastic.co/licensing/elastic-license
  */
@@ -26,18 +26,14 @@ class MarkPaid extends AbstractService
 {
     use GeneratesCounter;
 
-    private $invoice;
-
     private $payable_balance;
 
-    public function __construct(Invoice $invoice)
+    public function __construct(private Invoice $invoice, private ?string $reference)
     {
-        $this->invoice = $invoice;
     }
 
     public function run()
     {
-
         /*Don't double pay*/
         if ($this->invoice->status_id == Invoice::STATUS_PAID) {
             return $this->invoice;
@@ -48,22 +44,20 @@ class MarkPaid extends AbstractService
         }
 
         \DB::connection(config('database.default'))->transaction(function () {
-
             $this->invoice = Invoice::withTrashed()->where('id', $this->invoice->id)->lockForUpdate()->first();
 
-            if($this->invoice)
-            {
+            if ($this->invoice) {
                 $this->payable_balance = $this->invoice->balance;
 
                 $this->invoice
                     ->service()
                     ->setExchangeRate()
+                    ->clearPartial()
                     ->updateBalance($this->payable_balance * -1)
                     ->updatePaidToDate($this->payable_balance)
                     ->setStatus(Invoice::STATUS_PAID)
                     ->save();
             }
-
         }, 1);
 
         /* Create Payment */
@@ -73,12 +67,12 @@ class MarkPaid extends AbstractService
         $payment->applied = $this->payable_balance;
         $payment->status_id = Payment::STATUS_COMPLETED;
         $payment->client_id = $this->invoice->client_id;
-        $payment->transaction_reference = ctrans('texts.manual_entry');
+        $payment->transaction_reference = $this->reference ?: ctrans('texts.manual_entry');
         $payment->currency_id = $this->invoice->client->getSetting('currency_id');
         $payment->is_manual = true;
 
         if ($this->invoice->company->timezone()) {
-            $payment->date = now()->addSeconds($this->invoice->company->timezone()->utc_offset)->format('Y-m-d');
+            $payment->date = now()->addSeconds($this->invoice->company->utc_offset())->format('Y-m-d');
         }
 
         $payment_type_id = $this->invoice->client->getSetting('payment_type_id');
@@ -90,16 +84,17 @@ class MarkPaid extends AbstractService
         $payment->saveQuietly();
 
         $payment->service()->applyNumber()->save();
-        
-        if($payment->company->getSetting('send_email_on_mark_paid'))
-            $payment->service()->sendEmail();
-
-        $this->setExchangeRate($payment);
 
         /* Create a payment relationship to the invoice entity */
         $payment->invoices()->attach($this->invoice->id, [
             'amount' => $this->payable_balance,
         ]);
+
+        if ($payment->client->getSetting('send_email_on_mark_paid')) {
+            $payment->service()->sendEmail();
+        }
+
+        $this->setExchangeRate($payment);
 
         event('eloquent.created: App\Models\Payment', $payment);
 
@@ -108,17 +103,16 @@ class MarkPaid extends AbstractService
         $this->invoice
                 ->service()
                 ->applyNumber()
-                ->touchPdf()
                 ->save();
 
         $payment->ledger()
-                ->updatePaymentBalance($this->payable_balance * -1);
+                ->updatePaymentBalance($this->payable_balance * -1, "Marked Paid Activity");
 
         //06-09-2022
         $this->invoice
              ->client
              ->service()
-             ->updateBalanceAndPaidToDate($payment->amount*-1, $payment->amount)
+             ->updateBalanceAndPaidToDate($payment->amount * -1, $payment->amount)
              ->save();
 
         $this->invoice = $this->invoice
@@ -131,7 +125,7 @@ class MarkPaid extends AbstractService
         event(new InvoiceWasPaid($this->invoice, $payment, $payment->company, Ninja::eventVars(auth()->user() ? auth()->user()->id : null)));
 
         event('eloquent.updated: App\Models\Invoice', $this->invoice);
-        
+
         return $this->invoice;
     }
 
